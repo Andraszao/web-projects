@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Game Character</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        Use WASD or Arrow Keys to move<br>
+        Space to jump
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Main character group
+        const characterGroup = new THREE.Group();
+
+        // Body
+        const cubeSize = 1;
+        const bodyGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+        const bodyMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x3498db,
+            shininess: 30
+        });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 0.5;
+        body.castShadow = true;
+        characterGroup.add(body);
+
+        // TV head group
+        const tvGroup = new THREE.Group();
+        tvGroup.position.y = 1.5;
+
+        // TV head cube
+        const tvGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+        const tvMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x2c3e50,
+            shininess: 50
+        });
+        const tvHead = new THREE.Mesh(tvGeometry, tvMaterial);
+        tvHead.castShadow = true;
+        tvGroup.add(tvHead);
+
+        // TV screen
+        const screenGeometry = new THREE.PlaneGeometry(0.8, 0.8);
+        const screenMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x000000,
+            emissive: 0x2ecc71,
+            emissiveIntensity: 0.2,
+            shininess: 100
+        });
+        const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+        screen.position.z = 0.501;
+        tvGroup.add(screen);
+
+        // Create scanning triangles
+        const triangles = [];
+        const numTriangles = 3;
+        const triangleShape = new THREE.Shape();
+        const triSize = 0.15;
+
+        triangleShape.moveTo(-triSize/2, -triSize/2);
+        triangleShape.lineTo(triSize/2, -triSize/2);
+        triangleShape.lineTo(0, triSize/2);
+        triangleShape.lineTo(-triSize/2, -triSize/2);
+
+        const triangleMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x2ecc71,
+            transparent: true,
+            opacity: 0.7
+        });
+
+        const triangleDefaultPositions = [
+            { x: -0.25, y: 0 },
+            { x: 0, y: 0 },
+            { x: 0.25, y: 0 }
+        ];
+
+        for (let i = 0; i < numTriangles; i++) {
+            const triangleGeometry = new THREE.ShapeGeometry(triangleShape);
+            const triangle = new THREE.Mesh(triangleGeometry, triangleMaterial.clone());
+            triangle.position.z = 0.502;
+            triangle.position.x = triangleDefaultPositions[i].x;
+            triangle.position.y = triangleDefaultPositions[i].y;
+            triangle.userData.defaultX = triangleDefaultPositions[i].x;
+            triangle.userData.defaultY = triangleDefaultPositions[i].y;
+            tvGroup.add(triangle);
+            triangles.push(triangle);
+        }
+
+        characterGroup.add(tvGroup);
+// Create floating halo
+        const haloGroup = new THREE.Group();
+
+        // Halo triangle shape
+        const haloTriangleShape = new THREE.Shape();
+        const haloSize = 1;
+        haloTriangleShape.moveTo(-haloSize/2, 0);
+        haloTriangleShape.lineTo(haloSize/2, 0);
+        haloTriangleShape.lineTo(0, haloSize);
+        haloTriangleShape.lineTo(-haloSize/2, 0);
+
+        // Inner hollow shape
+        const innerShape = new THREE.Shape();
+        const innerScale = 0.8;
+        innerShape.moveTo(-haloSize/2 * innerScale, 0.1);
+        innerShape.lineTo(haloSize/2 * innerScale, 0.1);
+        innerShape.lineTo(0, haloSize * innerScale);
+        innerShape.lineTo(-haloSize/2 * innerScale, 0.1);
+
+        haloTriangleShape.holes.push(innerShape);
+
+        const extrudeSettings = {
+            steps: 1,
+            depth: 0.05,
+            bevelEnabled: true,
+            bevelThickness: 0.02,
+            bevelSize: 0.02,
+            bevelSegments: 3
+        };
+
+        const haloGeometry = new THREE.ExtrudeGeometry(haloTriangleShape, extrudeSettings);
+        const haloMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xff3333,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide
+        });
+
+        const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+        halo.position.set(0, 2.2, 0);
+        haloGroup.add(halo);
+
+        // Add glow layers to halo
+        for (let i = 1; i <= 3; i++) {
+            const glowMaterial = new THREE.MeshPhongMaterial({
+                color: 0xff3333,
+                emissive: 0xff0000,
+                emissiveIntensity: 0.5,
+                transparent: true,
+                opacity: 0.15 / i,
+                side: THREE.DoubleSide
+            });
+            
+            const glowHalo = new THREE.Mesh(haloGeometry, glowMaterial);
+            glowHalo.scale.set(1 + i * 0.05, 1 + i * 0.05, 1);
+            glowHalo.position.copy(halo.position);
+            haloGroup.add(glowHalo);
+        }
+
+        characterGroup.add(haloGroup);
+        scene.add(characterGroup);
+
+        // Ground
+        const PLATFORM_SIZE = 20;
+        const groundGeometry = new THREE.PlaneGeometry(PLATFORM_SIZE, PLATFORM_SIZE);
+        const groundMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x808080, 
+            side: THREE.DoubleSide 
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = Math.PI / 2;
+        ground.position.y = -1;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Lighting
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+        mainLight.position.set(5, 10, 5);
+        mainLight.castShadow = true;
+        scene.add(mainLight);
+
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+
+        const fillLight = new THREE.DirectionalLight(0x8080ff, 0.3);
+        fillLight.position.set(-5, 3, -5);
+        scene.add(fillLight);
+
+        // Camera setup
+        camera.position.set(0, 5, 10);
+        camera.lookAt(characterGroup.position);
+
+        // Movement and animation variables
+        const movement = {
+            velocity: new THREE.Vector3(0, 0, 0),
+            acceleration: new THREE.Vector3(0, 0, 0),
+            rotation: new THREE.Quaternion(),
+            targetRotation: new THREE.Quaternion(),
+            jumping: false,
+            speed: 0.8,
+            maxVelocity: 0.2,
+            friction: 0.92,
+            rotationSpeed: 0.1,
+            haloFloatOffset: 0,
+            glowPulse: 0,
+            scanOffset: 0,
+            lastVelocity: new THREE.Vector3(0, 0, 0),
+            squashStretch: {
+                factor: 1,
+                target: 1,
+                velocity: 0
+            },
+            heartbeat: {
+                phase: 0,
+                baseSpeed: 0.03,
+                intensity: 0.2
+            },
+            jumpForce: 0.3,
+            gravity: 0.015,
+            haloEnergy: 0
+        };
+
+        const BOUNDARY = PLATFORM_SIZE/2 - 1;
+
+        // Input handling
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+// Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const moveX = (keys['d'] || keys['arrowright'] ? 1 : 0) - (keys['a'] || keys['arrowleft'] ? 1 : 0);
+            const moveZ = (keys['s'] || keys['arrowdown'] ? 1 : 0) - (keys['w'] || keys['arrowup'] ? 1 : 0);
+
+            movement.acceleration.set(
+                moveX * movement.speed,
+                0,
+                moveZ * movement.speed
+            );
+
+            // Store previous velocity for comparison
+            movement.lastVelocity.copy(movement.velocity);
+
+            movement.velocity.add(movement.acceleration);
+            movement.velocity.multiplyScalar(movement.friction);
+
+            if (movement.velocity.length() > movement.maxVelocity) {
+                movement.velocity.normalize().multiplyScalar(movement.maxVelocity);
+            }
+
+            const newPosition = characterGroup.position.clone().add(movement.velocity);
+
+            // Calculate current speed for animations
+            const speed = movement.velocity.length();
+            const verticalSpeed = Math.abs(movement.velocity.y);
+            
+            // Squash and Stretch
+            if (movement.jumping) {
+                movement.squashStretch.target = movement.velocity.y > 0 ? 1.2 : 0.8;
+            } else if (speed > 0.01) {
+                movement.squashStretch.target = 0.9 + Math.sin(Date.now() * 0.01) * 0.1;
+            } else {
+                movement.squashStretch.target = 1;
+            }
+
+            // Smooth squash/stretch transition
+            movement.squashStretch.velocity += (movement.squashStretch.target - movement.squashStretch.factor) * 0.1;
+            movement.squashStretch.velocity *= 0.8;
+            movement.squashStretch.factor += movement.squashStretch.velocity;
+
+            // Apply squash/stretch to body
+            body.scale.y = movement.squashStretch.factor;
+            body.scale.x = body.scale.z = 1 / Math.sqrt(movement.squashStretch.factor);
+            body.position.y = 0.5 * movement.squashStretch.factor;
+
+            // Enhanced Triangle Animation
+            movement.heartbeat.phase += movement.heartbeat.baseSpeed;
+            const isMoving = speed > 0.01;
+            const velocityChange = movement.velocity.clone().sub(movement.lastVelocity);
+            
+            triangles.forEach((triangle, index) => {
+                // Base heartbeat pulse when idle
+                const heartbeatPulse = Math.pow(Math.sin(movement.heartbeat.phase + index * 0.5), 2) * 
+                                     movement.heartbeat.intensity;
+                
+                // Movement-based animations
+                const baseY = isMoving 
+                    ? Math.sin(movement.scanOffset + index * 1) * 0.15
+                    : heartbeatPulse * 0.2;
+
+                const xOffset = movement.velocity.x * 0.2;
+                const yOffset = -speed * 0.2;
+                const rotationOffset = isMoving 
+                    ? velocityChange.length() * 2 
+                    : heartbeatPulse * 0.5;
+
+                // Enhanced opacity pulsing
+                const baseOpacity = isMoving ? 0.7 + speed * 0.5 : 0.5 + heartbeatPulse * 0.5;
+                
+                // Apply all effects
+                triangle.position.x = triangle.userData.defaultX + (isMoving ? xOffset : 0);
+                triangle.position.y = triangle.userData.defaultY + baseY + (isMoving ? yOffset : 0);
+                triangle.rotation.z = isMoving 
+                    ? movement.scanOffset + index + rotationOffset
+                    : heartbeatPulse * Math.PI * 0.1;
+                
+                // Color shift based on movement/heartbeat
+                triangle.material.color.setHSL(
+                    0.3, // Green base
+                    isMoving ? 0.8 + speed * 0.2 : 0.6 + heartbeatPulse * 0.4,
+                    0.6
+                );
+                triangle.material.opacity = baseOpacity;
+            });
+
+            // Platform boundaries
+            if (newPosition.x >= -BOUNDARY && newPosition.x <= BOUNDARY && 
+                newPosition.z >= -BOUNDARY && newPosition.z <= BOUNDARY) {
+                characterGroup.position.copy(newPosition);
+            } else {
+                movement.velocity.set(0, movement.velocity.y, 0);
+            }
+
+            // Character rotation
+            if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+                const angle = Math.atan2(movement.velocity.x, movement.velocity.z);
+                movement.targetRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+                characterGroup.quaternion.slerp(movement.targetRotation, movement.rotationSpeed);
+            }
+
+            // Enhanced Jump Physics
+            if ((keys[' '] || keys['spacebar']) && !movement.jumping) {
+                movement.velocity.y = movement.jumpForce;
+                movement.jumping = true;
+                movement.squashStretch.velocity += 0.2; // Initial stretch
+            }
+
+            if (movement.jumping) {
+                movement.velocity.y -= movement.gravity;
+
+                if (characterGroup.position.y <= 0) {
+                    characterGroup.position.y = 0;
+                    movement.jumping = false;
+                    movement.velocity.y = 0;
+                    movement.squashStretch.velocity -= 0.2; // Landing squash
+                }
+            }
+
+            characterGroup.position.y += movement.velocity.y;
+
+            // Enhanced Halo Effects
+            movement.haloEnergy += isMoving ? 0.1 : 0.03;
+            const haloIntensity = 0.5 + Math.sin(movement.haloEnergy) * 0.2;
+            
+            haloGroup.children.forEach((child, index) => {
+                if (child.material) {
+                    // Pulse color and intensity
+                    const pulsePhase = movement.haloEnergy + index * 0.5;
+                    child.material.emissiveIntensity = haloIntensity / (index + 1);
+                    child.material.emissive.setHSL(
+                        0.0, // Red base
+                        0.8,
+                        0.4 + Math.sin(pulsePhase) * 0.2
+                    );
+                    
+                    // Dynamic scaling
+                    const scale = 1 + (index * 0.05) + Math.sin(pulsePhase * 0.5) * 0.1;
+                    child.scale.set(scale, scale, 1);
+                }
+            });
+
+            // Camera follow
+            const cameraOffset = new THREE.Vector3(0, 5, 10);
+            camera.position.copy(characterGroup.position).add(cameraOffset);
+            camera.lookAt(characterGroup.position);
+
+            // Update animation offsets
+            movement.scanOffset += 0.03;
+
+            renderer.render(scene, camera);
+        }
+
+        // Window resize handling
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
